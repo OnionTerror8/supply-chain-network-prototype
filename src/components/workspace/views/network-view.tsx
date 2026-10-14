@@ -179,7 +179,6 @@ export function NetworkView() {
         onPaneClick={() => select(null)}
         onNodeDragStop={(_, n) => setPosBag((p) => ({ id: model.id, map: { ...(p.id === model.id ? p.map : {}), [n.id]: n.position } }))}
         onConnect={onConnect}
-        proOptions={{ hideAttribution: true }}
         className="bg-background"
       >
         <Background gap={24} size={1} className="!bg-background" />

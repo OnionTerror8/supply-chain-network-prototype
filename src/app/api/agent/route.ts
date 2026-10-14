@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { getAgent } from "@/lib/agent";
 import type { AgentContext } from "@/lib/agent";
 
-export const runtime = "nodejs";
-
 /**
  * POST /api/agent
  * Body: { message: string; context: AgentContext }

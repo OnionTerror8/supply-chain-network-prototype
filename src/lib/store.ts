@@ -392,7 +392,7 @@ export const useWorkspace = create<WorkspaceState>()(
     },
     {
       name: "meridian-workspace-v1",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => (typeof window === "undefined" ? { getItem: () => null, setItem: () => {}, removeItem: () => {} } : localStorage)),
       skipHydration: true,
       partialize: (s) => ({ baseline: s.baseline, scenarios: s.scenarios, activeScenarioId: s.activeScenarioId, messages: s.messages.slice(-60), changeLog: s.changeLog.slice(0, 200), view: s.view, pendingSetup: s.pendingSetup }),
     },

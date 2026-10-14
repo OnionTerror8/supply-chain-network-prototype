@@ -147,7 +147,6 @@
 .scrollbar-thin::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--foreground) 15%, transparent); border-radius: 9999px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 
-.react-flow__attribution { display: none; }
 .react-flow__handle { opacity: 0; }
 .react-flow__node:hover .react-flow__handle { opacity: 1; }
 

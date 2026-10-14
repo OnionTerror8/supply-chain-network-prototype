@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useWorkspace } from "@/lib/store";
 import { TopBar } from "./top-bar";
 import { NavRail } from "./nav-rail";
@@ -23,8 +23,7 @@ import { cn } from "@/lib/utils";
 const CANVAS_VIEWS = new Set(["map", "network", "flows"]);
 
 export function Workspace() {
-  const hydrated = useWorkspace((s) => s.hydrated);
-  const setHydrated = useWorkspace((s) => s.setHydrated);
+  const [ready, setReady] = useState(false);
   const baseline = useWorkspace((s) => s.baseline);
   const view = useWorkspace((s) => s.view);
   const agentOpen = useWorkspace((s) => s.agentOpen);
@@ -32,16 +31,19 @@ export function Workspace() {
   const inspectorOpen = useWorkspace((s) => s.inspectorOpen);
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.resolve(useWorkspace.persist.rehydrate()).finally(() => {
-      if (!cancelled) setHydrated();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [setHydrated]);
+    try {
+      void useWorkspace.persist?.rehydrate?.();
+    } catch {
+      /* localStorage may be unavailable; the workspace still opens. */
+    }
+    const t = window.setTimeout(() => {
+      useWorkspace.getState().setHydrated();
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, []);
 
-  if (!hydrated) {
+  if (!ready) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">

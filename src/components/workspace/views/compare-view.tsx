@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis, Legend } from "recharts";
 import { ArrowDownRight, ArrowUpRight, Check, FlaskConical, GitCompareArrows, Minus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -132,10 +133,12 @@ export function CompareView() {
                   {(Object.keys(GROUP_LABEL) as ComparisonRow["group"][]).map((g) => {
                     const rows = r.comparison.rows.filter((x) => x.group === g);
                     if (!rows.length) return null;
-                    return [
-                      <tr key={g} className="bg-muted/40"><td colSpan={4} className="px-4 py-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">{GROUP_LABEL[g]}</td></tr>,
-                      ...rows.map((row) => <Row key={row.key} row={row} cur={cur} />),
-                    ];
+                    return (
+                      <Fragment key={g}>
+                        <tr className="bg-muted/40"><td colSpan={4} className="px-4 py-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">{GROUP_LABEL[g]}</td></tr>
+                        {rows.map((row) => <Row key={row.key} row={row} cur={cur} />)}
+                      </Fragment>
+                    );
                   })}
                 </tbody>
               </table>
