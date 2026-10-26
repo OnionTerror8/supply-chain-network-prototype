@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AgentAction, AgentContext, AgentReply, PendingSetup, WorkspaceView } from "./agent/types";
 import { RuleBasedAgent } from "./agent/rule-agent";
+import { buildCanonicalSample } from "./data/canonical-sample";
 import { buildFoodSample } from "./data/food-sample";
 import { buildRetailSample } from "./data/retail-sample";
 import { cloneModel, uid, userValue } from "./domain/helpers";
@@ -22,11 +23,13 @@ import type {
   Temperature,
 } from "./domain/types";
 import { detectFindings } from "./engine/findings";
+import { applyHorizon } from "./engine/horizon";
 import { computeMetrics } from "./engine/metrics";
-import { applyChange, evaluateScenario, type Comparison } from "./engine/scenarios";
+import { applyChange, compareMetrics, evaluateScenario, type Comparison } from "./engine/scenarios";
 import { downloadWorkbook } from "./export/excel";
 
 export type Overlay = "volume" | "cost" | "emissions" | "confidence" | "risk";
+export type InspectStory = "volume" | "cost" | "lead" | "pinch" | "path";
 
 export interface Selection {
   nodeId?: string;
@@ -42,6 +45,7 @@ export interface Filters {
   riskCategory: FindingCategory | null;
   channel: "all" | "retail" | "ecom" | "wholesale";
   horizon: "average" | "peak";
+  inspectStory: InspectStory;
 }
 
 export interface ChatMessage {
@@ -85,7 +89,7 @@ interface WorkspaceState {
 
   // lifecycle
   setHydrated: () => void;
-  loadSample: (which: "food" | "retail") => void;
+  loadSample: (which: "food" | "retail" | "canonical") => void;
   loadModel: (model: NetworkModel, summary: string, actor?: ChangeLogEntry["actor"]) => void;
   resetWorkspace: () => void;
 
@@ -121,7 +125,7 @@ interface WorkspaceState {
   exportExcel: () => void;
 }
 
-const defaultFilters: Filters = { productFamily: null, temperature: null, region: null, nodeTypes: [], riskCategory: null, channel: "all", horizon: "average" };
+const defaultFilters: Filters = { productFamily: null, temperature: null, region: null, nodeTypes: [], riskCategory: null, channel: "all", horizon: "average", inspectStory: "volume" };
 
 const welcome = (): ChatMessage => ({
   id: uid("msg"),
@@ -139,14 +143,24 @@ function log(actor: ChangeLogEntry["actor"], scope: ChangeLogEntry["scope"], sum
   return { id: uid("log"), at: new Date().toISOString(), actor, scope, scenarioId, summary, details };
 }
 
-function evaluateAll(baseline: NetworkModel, scenarios: Scenario[]) {
-  const baselineMetrics = computeMetrics(baseline);
-  const baselineFindings = detectFindings(baseline, baselineMetrics);
+function evaluateAll(baseline: NetworkModel, scenarios: Scenario[], horizon: Filters["horizon"] = "average") {
+  const viewBase = applyHorizon(baseline, horizon);
+  const baselineMetrics = computeMetrics(viewBase);
+  const baselineFindings = detectFindings(viewBase, baselineMetrics, horizon);
+  const avgMetrics = horizon === "peak" ? computeMetrics(baseline) : baselineMetrics;
   const scenarioResults: Record<string, ScenarioResult> = {};
   for (const s of scenarios) {
     try {
-      const r = evaluateScenario(baseline, baselineMetrics, s);
-      scenarioResults[s.id] = { ...r, findings: detectFindings(r.model, r.metrics) };
+      const r = evaluateScenario(baseline, avgMetrics, s);
+      const viewScen = applyHorizon(r.model, horizon);
+      const viewMetrics = horizon === "peak" ? computeMetrics(viewScen) : r.metrics;
+      scenarioResults[s.id] = {
+        model: r.model,
+        metrics: viewMetrics,
+        findings: detectFindings(viewScen, viewMetrics, horizon),
+        comparison: horizon === "peak" ? compareMetrics(baselineMetrics, viewMetrics, viewBase, s, r.log) : r.comparison,
+        log: r.log,
+      };
     } catch (e) {
       console.error("Scenario evaluation failed", s.name, e);
     }
@@ -165,7 +179,7 @@ export const useWorkspace = create<WorkspaceState>()(
           set({ ...patch, baselineMetrics: null, baselineFindings: [], scenarioResults: {}, modelVersion: s.modelVersion + 1 });
           return;
         }
-        const derived = evaluateAll(s.baseline, s.scenarios);
+        const derived = evaluateAll(s.baseline, s.scenarios, s.filters.horizon);
         set({ ...patch, ...derived, modelVersion: s.modelVersion + 1 });
       };
 
@@ -208,7 +222,7 @@ export const useWorkspace = create<WorkspaceState>()(
           recompute({ hydrated: true });
         },
         loadSample: (which) => {
-          const model = which === "food" ? buildFoodSample() : buildRetailSample();
+          const model = which === "food" ? buildFoodSample() : which === "retail" ? buildRetailSample() : buildCanonicalSample();
           get().loadModel(model, `Loaded sample network “${model.name}”`, "system");
           set({ view: "overview" });
         },
@@ -230,7 +244,11 @@ export const useWorkspace = create<WorkspaceState>()(
         setOverlay: (overlay) => set({ overlay }),
         select: (selection) => set({ selection, inspectorOpen: !!selection }),
         setHover: (hoverId) => set({ hoverId }),
-        setFilters: (f) => set({ filters: { ...get().filters, ...f } }),
+        setFilters: (f) => {
+          const filters = { ...get().filters, ...f };
+          if (f.horizon && f.horizon !== get().filters.horizon) recompute({ filters });
+          else set({ filters });
+        },
         setInspectorOpen: (inspectorOpen) => set({ inspectorOpen, ...(inspectorOpen ? {} : { selection: null }) }),
         setAgentOpen: (agentOpen) => set({ agentOpen }),
 

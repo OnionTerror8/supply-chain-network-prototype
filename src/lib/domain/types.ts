@@ -72,22 +72,22 @@ export const NODE_TYPE_META: Record<
   NodeType,
   { label: string; tier: Tier; short: string; color: string }
 > = {
-  farm: { label: "Farm / grower", tier: "origin", short: "Farm", color: "#65a30d" },
-  supplier: { label: "Supplier", tier: "origin", short: "Supplier", color: "#84cc16" },
-  port: { label: "Port / border point", tier: "inbound", short: "Port", color: "#0e7490" },
-  factory: { label: "Factory", tier: "manufacturing", short: "Factory", color: "#7c3aed" },
-  copacker: { label: "Co-packer", tier: "manufacturing", short: "Co-packer", color: "#a855f7" },
-  national_dc: { label: "National DC", tier: "national", short: "NDC", color: "#2563eb" },
-  regional_dc: { label: "Regional DC", tier: "regional", short: "RDC", color: "#0ea5e9" },
-  cross_dock: { label: "Cross-dock", tier: "regional", short: "X-dock", color: "#06b6d4" },
-  cold_store: { label: "Cold store", tier: "national", short: "Cold", color: "#38bdf8" },
-  ecom_fc: { label: "E-commerce FC", tier: "channel", short: "E-com FC", color: "#f59e0b" },
-  micro_fc: { label: "Micro-fulfilment", tier: "channel", short: "MFC", color: "#fbbf24" },
-  dark_store: { label: "Dark store", tier: "channel", short: "Dark store", color: "#d97706" },
-  wholesaler: { label: "Wholesaler / distributor", tier: "channel", short: "Wholesale", color: "#ea580c" },
-  store: { label: "Retail store", tier: "customer", short: "Store", color: "#e11d48" },
-  customer_zone: { label: "Customer zone", tier: "customer", short: "Customers", color: "#f43f5e" },
-  returns_center: { label: "Returns centre", tier: "channel", short: "Returns", color: "#78716c" },
+  farm: { label: "Farm / grower", tier: "origin", short: "Farm", color: "#6b7c3a" },
+  supplier: { label: "Supplier", tier: "origin", short: "Supplier", color: "#8a7a3d" },
+  port: { label: "Port / border point", tier: "inbound", short: "Port", color: "#0f6f73" },
+  factory: { label: "Factory", tier: "manufacturing", short: "Factory", color: "#9a4a2a" },
+  copacker: { label: "Co-packer", tier: "manufacturing", short: "Co-packer", color: "#b56a3a" },
+  national_dc: { label: "National DC", tier: "national", short: "NDC", color: "#1f3d4d" },
+  regional_dc: { label: "Regional DC", tier: "regional", short: "RDC", color: "#2a6a78" },
+  cross_dock: { label: "Cross-dock", tier: "regional", short: "X-dock", color: "#a67c3a" },
+  cold_store: { label: "Cold store", tier: "national", short: "Cold", color: "#4a7c8a" },
+  ecom_fc: { label: "E-commerce FC", tier: "channel", short: "E-com FC", color: "#c2782a" },
+  micro_fc: { label: "Micro-fulfilment", tier: "channel", short: "MFC", color: "#b8860b" },
+  dark_store: { label: "Dark store", tier: "channel", short: "Dark store", color: "#8b5a2b" },
+  wholesaler: { label: "Wholesaler / distributor", tier: "channel", short: "Wholesale", color: "#c45c26" },
+  store: { label: "Retail store", tier: "customer", short: "Store", color: "#a33b2b" },
+  customer_zone: { label: "Customer zone", tier: "customer", short: "Customers", color: "#b54a3a" },
+  returns_center: { label: "Returns centre", tier: "channel", short: "Returns", color: "#6b6560" },
 };
 
 export const TIER_ORDER: Tier[] = [
@@ -349,6 +349,8 @@ export interface LaneMetrics {
   annualEmissionsTonnes: number;
   transitDays: number;
   shareOfDestinationInbound: number;
+  /** Weekly cases after any view transform (e.g. peak horizon). */
+  volumePerWeek: number;
 }
 
 export interface NetworkMetrics {

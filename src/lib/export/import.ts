@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { confirmed, defaultParameters, uid } from "../domain/helpers";
 import type { Lane, NetworkModel, NetworkNode, NodeType, ProductFamily, Temperature, TransportMode } from "../domain/types";
+import { isJsonNetworkFile, parseNetworkJson } from "./json";
 
 type Row = Record<string, string | number | undefined>;
 
@@ -10,6 +11,15 @@ const num = (v: string | number | undefined) => {
   return Number.isNaN(n) ? undefined : n;
 };
 const str = (v: string | number | undefined) => (v === undefined ? undefined : String(v).trim());
+
+/** Spreadsheet or tagged JSON. JSON preserves provenance; Excel marks provided cells as confirmed. */
+export async function importNetworkFile(file: File): Promise<{ model: NetworkModel; warnings: string[] }> {
+  if (isJsonNetworkFile(file)) {
+    const model = parseNetworkJson(JSON.parse(await file.text()));
+    return { model, warnings: ["Imported tagged JSON. Provenance on each field is preserved."] };
+  }
+  return importWorkbook(file);
+}
 
 /** Parse a workbook created from the Meridian template. Provided values are tagged as confirmed. */
 export async function importWorkbook(file: File): Promise<{ model: NetworkModel; warnings: string[] }> {

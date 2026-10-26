@@ -3,15 +3,17 @@
 import { useTheme } from "next-themes";
 import { useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { Bot, ChevronDown, Download, FileSpreadsheet, FolderOpen, GitBranch, Moon, Plus, Sun, Upload } from "lucide-react";
+import { Bot, ChevronDown, Download, FileSpreadsheet, FolderOpen, Moon, Plus, Sun, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfidenceBadge } from "@/components/shared/badges";
 import { useActive, useWorkspace } from "@/lib/store";
-import { importWorkbook } from "@/lib/export/import";
+import { importNetworkFile } from "@/lib/export/import";
 import { downloadTemplate } from "@/lib/export/excel";
+import { downloadNetworkJson } from "@/lib/export/json";
+import { buildCanonicalSample } from "@/lib/data/canonical-sample";
 import { cn } from "@/lib/utils";
 import { fmtMoney } from "@/lib/domain/helpers";
 
@@ -30,7 +32,7 @@ export function TopBar() {
 
   const onImport = async (file: File) => {
     try {
-      const { model, warnings } = await importWorkbook(file);
+      const { model, warnings } = await importNetworkFile(file);
       loadModel(model, `Imported “${file.name}”`);
       setView("overview");
       toast.success(`Imported ${model.nodes.length} nodes and ${model.lanes.length} lanes`, { description: warnings[0] });
@@ -43,10 +45,12 @@ export function TopBar() {
     <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-card px-3">
       <div className="flex items-center gap-2 pr-2">
         <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
-          <GitBranch className="size-4" />
+          <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden>
+            <path d="M12 2.2 14.1 9.9 21.8 12 14.1 14.1 12 21.8 9.9 14.1 2.2 12 9.9 9.9Z" />
+          </svg>
         </span>
         <div className="leading-none">
-          <div className="text-sm font-semibold tracking-tight">Meridian</div>
+          <div className="font-heading text-sm font-semibold tracking-tight">Meridian</div>
           <div className="hidden text-[10px] text-muted-foreground sm:block">Network modelling</div>
         </div>
       </div>
@@ -87,15 +91,17 @@ export function TopBar() {
         <span className="text-sm text-muted-foreground">No network loaded</span>
       )}
       <div className="ml-auto flex items-center gap-1">
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.json" className="hidden" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm"><FolderOpen />Open<ChevronDown className="opacity-60" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
             <DropdownMenuLabel>Sample networks</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => loadSample("canonical")}>Canonical starter (10-node JSON shape)</DropdownMenuItem>
             <DropdownMenuItem onClick={() => loadSample("food")}>Food manufacturer (chilled & ambient)</DropdownMenuItem>
             <DropdownMenuItem onClick={() => loadSample("retail")}>Omnichannel retailer (stores & e-com)</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => downloadNetworkJson(buildCanonicalSample(), "meridian-canonical-starter.json")}>Download canonical JSON</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => fileRef.current?.click()}><Upload />Import spreadsheet</DropdownMenuItem>
             <DropdownMenuItem onClick={() => downloadTemplate()}><FileSpreadsheet />Download import template</DropdownMenuItem>

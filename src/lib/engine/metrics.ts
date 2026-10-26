@@ -153,6 +153,7 @@ export function computeMetrics(model: NetworkModel): NetworkMetrics {
       annualEmissionsTonnes: emissions,
       transitDays: transit,
       shareOfDestinationInbound: 0,
+      volumePerWeek: vol,
     };
   }
   for (const lane of model.lanes) {

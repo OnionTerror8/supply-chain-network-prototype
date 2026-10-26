@@ -2,6 +2,7 @@ import type { Filters, Overlay } from "./store";
 import type { Finding, Lane, NetworkMetrics, NetworkModel, NetworkNode, Provenance, Severity } from "./domain/types";
 import { NODE_TYPE_META } from "./domain/types";
 import { sourceWeight } from "./domain/helpers";
+import { MODE_COLOR } from "./visual/mode";
 
 const CHANNEL_NODE_TYPES = {
   ecom: new Set(["ecom_fc", "micro_fc", "dark_store"]),
@@ -143,16 +144,16 @@ export const SEVERITY_HEX: Record<Severity, string> = {
   critical: "#dc2626",
   high: "#ea580c",
   medium: "#d97706",
-  low: "#2563eb",
-  info: "#64748b",
+  low: "#2a6a78",
+  info: "#78716c",
 };
 
 export const PROVENANCE_HEX: Record<Provenance, string> = {
-  confirmed: "#059669",
-  user: "#2563eb",
-  assumed: "#d97706",
-  ai: "#7c3aed",
-  missing: "#9ca3af",
+  confirmed: "#3d7a4a",
+  user: "#2a6a78",
+  assumed: "#c2782a",
+  ai: "#6b6560",
+  missing: "#a8a29e",
 };
 
 export function evidenceColor(e: number) {
@@ -166,16 +167,15 @@ export function evidenceColor(e: number) {
 /** Visual encodings shared by map, network and flow views. */
 export function laneVisual(overlay: Overlay, lane: Lane, metrics: NetworkMetrics | null, severity?: Severity) {
   const lm = metrics?.laneMetrics[lane.id];
-  const vol = lane.volumePerWeek.value;
+  const vol = lm?.volumePerWeek ?? lane.volumePerWeek.value;
   let value = vol;
   if (overlay === "cost") value = lm?.annualCost ?? 0;
   if (overlay === "emissions") value = lm?.annualEmissionsTonnes ?? 0;
-  let color = "#64748b";
+  let color = MODE_COLOR[lane.mode] ?? "#57534e";
   if (overlay === "confidence") color = evidenceColor(laneEvidence(lane));
-  else if (overlay === "risk") color = severity ? SEVERITY_HEX[severity] : "#94a3b8";
-  else if (overlay === "cost") color = "#7c3aed";
-  else if (overlay === "emissions") color = "#0f766e";
-  else color = lane.temperature === "chilled" ? "#0284c7" : lane.temperature === "frozen" ? "#2563eb" : "#64748b";
+  else if (overlay === "risk") color = severity ? SEVERITY_HEX[severity] : "#a8a29e";
+  else if (overlay === "cost") color = "#9a4a2a";
+  else if (overlay === "emissions") color = "#0f6f73";
   return { value, color, pattern: lane.pattern };
 }
 

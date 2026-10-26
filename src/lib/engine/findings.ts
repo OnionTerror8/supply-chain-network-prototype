@@ -35,7 +35,7 @@ function confidenceFrom(sources: Provenance[], extraDown: string[] = [], extraUp
 
 const severityRank: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
-export function detectFindings(model: NetworkModel, m: NetworkMetrics): Finding[] {
+export function detectFindings(model: NetworkModel, m: NetworkMetrics, horizon: "average" | "peak" = "average"): Finding[] {
   const out: Finding[] = [];
   const cur = model.currency;
   const nodes = new Map(model.nodes.map((n) => [n.id, n]));
@@ -55,10 +55,11 @@ export function detectFindings(model: NetworkModel, m: NetworkMetrics): Finding[
     const u = nm.utilisation;
     if (u <= threshold - 0.05) continue;
     const region = model.regions.find((r) => r.nodeIds.some((id) => outLanes(node.id).some((l) => l.to === id)));
-    const peak = region?.seasonalityPeakFactor?.value ?? 1.3;
+    const peak = horizon === "peak" ? 1 : (region?.seasonalityPeakFactor?.value ?? 1.3);
     const peakUtil = u * peak;
     const severity: Severity = u > 1 ? "critical" : u > threshold ? "high" : "medium";
     const shortfallPeak = Math.max(0, nm.throughputPerWeek * peak - node.capacityPerWeek.value);
+    const weekLabel = horizon === "peak" ? "Peak-week" : "Average weekly";
     const weeksAtPeak = 10;
     const costImpact = shortfallPeak * weeksAtPeak * model.parameters.stockoutCostPerCase.value;
     const { confidence, drivers } = confidenceFrom(
@@ -72,7 +73,9 @@ export function detectFindings(model: NetworkModel, m: NetworkMetrics): Finding[
       category: "capacity",
       severity,
       title: `${node.name} is running at ${fmtPct(u)} of capacity`,
-      detected: `Average weekly throughput of ${fmtNum(nm.throughputPerWeek)} cases against rated capacity of ${fmtNum(node.capacityPerWeek.value)}. At the ${fmtPct(peak - 1)} seasonal peak this reaches ${fmtPct(peakUtil)}${peakUtil > 1 ? `, a shortfall of ~${fmtNum(shortfallPeak)} cases/week` : ""}.`,
+      detected: horizon === "peak"
+        ? `${weekLabel} throughput of ${fmtNum(nm.throughputPerWeek)} cases against rated capacity of ${fmtNum(node.capacityPerWeek.value)} (${fmtPct(u)}${u > 1 ? `, a shortfall of ~${fmtNum(shortfallPeak)} cases/week` : ""}).`
+        : `${weekLabel} throughput of ${fmtNum(nm.throughputPerWeek)} cases against rated capacity of ${fmtNum(node.capacityPerWeek.value)}. At the ${fmtPct(peak - 1)} seasonal peak this reaches ${fmtPct(peakUtil)}${peakUtil > 1 ? `, a shortfall of ~${fmtNum(shortfallPeak)} cases/week` : ""}.`,
       whyItMatters: `Above ${fmtPct(threshold)} utilisation, small disruptions (late inbound, absence, line stoppage) cascade into missed dispatch windows. ${downstreamNodes.length} downstream points depend on this node.`,
       impacted: { nodeIds: [node.id, ...downstreamNodes], laneIds: outLanes(node.id).map((l) => l.id), productFamilyIds: [...new Set(outLanes(node.id).flatMap((l) => l.productFamilies))], period: "Seasonal peak weeks" },
       impact: { costAnnual: costImpact, servicePts: -(peakUtil > 1 ? Math.min(6, (peakUtil - 1) * 20) : 1.2), riskDelta: 8 },

@@ -2,20 +2,22 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileSpreadsheet, Lock, Plug, Upload, Workflow } from "lucide-react";
+import { Braces, FileSpreadsheet, Lock, Plug, Upload, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ProvenanceBadge, ProvenanceLegend, TaggedValue } from "@/components/shared/badges";
+import { TaggedCell } from "@/components/shared/tagged-field";
 import { SectionTitle } from "@/components/shared/kpi";
 import { useActive, useWorkspace } from "@/lib/store";
-import { COST_COMPONENT_LABEL, NODE_TYPE_META, type Provenance } from "@/lib/domain/types";
+import { COST_COMPONENT_LABEL, NODE_TYPE_META, type Provenance, type Tagged } from "@/lib/domain/types";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/domain/helpers";
 import { COST_LOGIC } from "@/lib/engine/metrics";
 import { downloadTemplate } from "@/lib/export/excel";
-import { importWorkbook } from "@/lib/export/import";
+import { importNetworkFile } from "@/lib/export/import";
+import { downloadNetworkJson } from "@/lib/export/json";
 import { CONNECTORS, PERMISSIONS, AUTOMATION_HOOKS } from "@/lib/integrations/connectors";
 import { applyFilters } from "@/lib/filters";
 import { cn } from "@/lib/utils";
@@ -26,6 +28,8 @@ export function DataView() {
   const { model, metrics, findings, isScenario } = useActive();
   const toggleRule = useWorkspace((s) => s.toggleRule);
   const select = useWorkspace((s) => s.select);
+  const updateNode = useWorkspace((s) => s.updateNode);
+  const updateLane = useWorkspace((s) => s.updateLane);
   const loadModel = useWorkspace((s) => s.loadModel);
   const setView = useWorkspace((s) => s.setView);
   const filters = useWorkspace((s) => s.filters);
@@ -39,7 +43,7 @@ export function DataView() {
 
   const onImport = async (file: File) => {
     try {
-      const { model: m, warnings } = await importWorkbook(file);
+      const { model: m, warnings } = await importNetworkFile(file);
       loadModel(m, `Imported “${file.name}”`);
       setView("overview");
       toast.success(`Imported ${m.nodes.length} nodes and ${m.lanes.length} lanes`, { description: warnings[0] });
@@ -54,12 +58,13 @@ export function DataView() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Data, assumptions & integrations</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Every value is labelled by provenance. Editing a cell marks it as user-entered. {isScenario ? "You are in a scenario — edits append as scenario changes." : "You are editing the baseline; every change is logged."}
+            Every value is labelled by provenance. Click a number to overwrite it — that marks it as user-entered. {isScenario ? "You are in a scenario — edits append as scenario changes." : "You are editing the baseline; every change is logged."}
           </p>
         </div>
         <div className="flex gap-2">
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.json" className="hidden" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
           <Button variant="outline" size="sm" onClick={() => downloadTemplate()}><FileSpreadsheet />Template</Button>
+          <Button variant="outline" size="sm" onClick={() => downloadNetworkJson(model)}><Braces />JSON</Button>
           <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload />Import</Button>
         </div>
       </div>
@@ -104,19 +109,19 @@ export function DataView() {
                       <TableCell className="text-xs">
                         <TaggedValue tagged={{ value: `${n.location.city ?? "—"}, ${n.location.country}`, source: n.location.source }} />
                       </TableCell>
-                      <Cell tagged={n.capacityPerWeek} format={fmtNum} />
+                      <EditableCell tagged={n.capacityPerWeek} format={fmtNum} onChange={(t) => updateNode(n.id, { capacityPerWeek: t }, `capacity set to ${fmtNum(t.value)}/wk`)} />
                       <TableCell className="text-right tabular-nums">{nm?.utilisation !== undefined ? <span className={nm.utilisation >= 0.85 ? "font-semibold text-amber-700 dark:text-amber-400" : ""}>{fmtPct(nm.utilisation)}</span> : <span className="text-muted-foreground">—</span>}</TableCell>
-                      <Cell tagged={n.inventoryDays} format={(v) => v.toFixed(1)} />
-                      <Cell tagged={n.fixedCostPerYear} format={(v) => fmtMoney(v, cur)} />
-                      <Cell tagged={n.handlingCostPerCase} format={(v) => fmtMoney(v, cur, false)} />
-                      <Cell tagged={n.reliability} format={(v) => fmtPct(v, 1)} />
+                      <EditableCell tagged={n.inventoryDays} format={(v) => v.toFixed(1)} step={0.5} onChange={(t) => updateNode(n.id, { inventoryDays: t }, `inventory days set to ${t.value}`)} />
+                      <EditableCell tagged={n.fixedCostPerYear} format={(v) => fmtMoney(v, cur)} onChange={(t) => updateNode(n.id, { fixedCostPerYear: t }, `fixed cost set to ${fmtMoney(t.value, cur)}`)} />
+                      <EditableCell tagged={n.handlingCostPerCase} format={(v) => fmtMoney(v, cur, false)} step={0.01} onChange={(t) => updateNode(n.id, { handlingCostPerCase: t }, `handling cost set to ${fmtMoney(t.value, cur, false)}`)} />
+                      <EditableCell tagged={n.reliability} format={(v) => fmtPct(v, 1)} step={0.01} onChange={(t) => updateNode(n.id, { reliability: t }, `reliability set to ${fmtPct(t.value, 1)}`)} />
                     </TableRow>
                   );
                 })}
               </TableBody>
             </Table>
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">Click a row to open the inspector and edit values. {isScenario ? "Edits append to the active scenario." : "Edits update the baseline and appear in History."}</p>
+          <p className="mt-2 text-[11px] text-muted-foreground">Click a number to edit it in place, or click the name to open the inspector. {isScenario ? "Edits append to the active scenario." : "Edits update the baseline and appear in History."}</p>
         </TabsContent>
 
         <TabsContent value="lanes" className="mt-3">
@@ -145,13 +150,11 @@ export function DataView() {
                       <TableCell className="text-xs">{name(l.to)}</TableCell>
                       <TableCell className="text-xs capitalize">{l.mode}{l.crossesBorder ? " · border" : ""}</TableCell>
                       <TableCell className="text-xs">{l.pattern?.replace("_", " ") ?? "linehaul"}</TableCell>
-                      <Cell tagged={l.volumePerWeek} format={fmtNum} />
-                      <TableCell className="text-right">
-                        {lm ? <span className="inline-flex items-center justify-end gap-1.5"><ProvenanceBadge source={lm.costSource} /><span className="tabular-nums">{fmtMoney(lm.costPerCase, cur, false)}</span></span> : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
+                      <EditableCell tagged={l.volumePerWeek} format={fmtNum} onChange={(t) => updateLane(l.id, { volumePerWeek: t }, `volume set to ${fmtNum(t.value)}/wk`)} />
+                      <EditableCell tagged={l.costPerCase ?? (lm ? { value: lm.costPerCase, source: lm.costSource } : undefined)} format={(v) => fmtMoney(v, cur, false)} step={0.01} onChange={(t) => updateLane(l.id, { costPerCase: t }, `cost per case set to ${fmtMoney(t.value, cur, false)}`)} />
                       <TableCell className="text-right tabular-nums">{lm ? fmtMoney(lm.annualCost, cur) : "—"}</TableCell>
-                      <Cell tagged={l.transitDays} format={(v) => `${v.toFixed(1)} d`} />
-                      <Cell tagged={l.reliability} format={(v) => fmtPct(v, 1)} />
+                      <EditableCell tagged={l.transitDays} format={(v) => `${v.toFixed(1)} d`} step={0.5} onChange={(t) => updateLane(l.id, { transitDays: t }, `transit set to ${t.value} days`)} />
+                      <EditableCell tagged={l.reliability} format={(v) => fmtPct(v, 1)} step={0.01} onChange={(t) => updateLane(l.id, { reliability: t }, `reliability set to ${fmtPct(t.value, 1)}`)} />
                     </TableRow>
                   );
                 })}
@@ -314,10 +317,20 @@ function Search({ value, onChange, placeholder }: { value: string; onChange: (v:
   return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mb-2 h-8 max-w-sm text-xs" />;
 }
 
-function Cell({ tagged, format }: { tagged?: { value: number; source: Provenance; note?: string; range?: [number, number] }; format: (v: number) => string }) {
+function EditableCell({
+  tagged,
+  format,
+  step,
+  onChange,
+}: {
+  tagged?: Tagged;
+  format: (v: number) => string;
+  step?: number;
+  onChange: (t: Tagged) => void;
+}) {
   return (
     <TableCell className="text-right">
-      <span className="inline-flex items-center justify-end gap-1.5"><TaggedValue tagged={tagged} format={format} /></span>
+      <TaggedCell tagged={tagged} format={format} step={step} onChange={onChange} />
     </TableCell>
   );
 }

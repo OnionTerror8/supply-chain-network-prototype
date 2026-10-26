@@ -155,12 +155,12 @@ export class RuleBasedAgent implements AgentProvider {
         };
         const sc = scenario(
           `Add ${place.city} ${type === "cross_dock" ? "cross-dock" : type === "national_dc" ? "NDC" : "RDC"}`,
-          `Add a ${type.replace("_", " ")} in ${place.city}${feeder ? `, fed from ${feeder.name}` : ""}, serving the customers that are materially nearer to it than to their current source.`,
+          `Add a ${type.replace("_", " ")} in ${place.city}${feeder ? `, fed from ${feeder.name}` : ""}, serving customers for whom it is the nearest DC.`,
           [{ type: "add_node", node, serveNearest: ["store", "customer_zone", "wholesaler"], feedFrom: feeder?.id }],
           { enablers: ["Site search and lease or 3PL contract", "Trunk schedule from the feeding site", "Customer delivery-day re-planning"] },
         );
         return {
-          text: `I have created a draft scenario **${sc.name}**.\n\n**What I did**\n- Placed a ${type.replace("_", " ")} at ${place.city} (${place.region}).\n- Reassigned any customer that is at least 25% nearer to ${place.city} than to its current source.\n- Added a trunk lane${feeder ? ` from ${feeder.name}` : ""} sized to the reassigned volume and rebalanced upstream flows.\n\n**Assumptions to check**\n- Capacity ${fmtNum(sized)} cases/week, fixed cost ${money(node.fixedCostPerYear.value)}/yr, handling ${money(node.handlingCostPerCase.value)}/case — all benchmarks until you have a quote.\n- New lane costs are estimated from distance at the network rate.${SCENARIO_FOOTER}`,
+          text: `I have created a draft scenario **${sc.name}**.\n\n**What I did**\n- Placed a ${type.replace("_", " ")} at ${place.city} (${place.region}).\n- Reassigned customers for whom ${place.city} is the nearest DC — closer than any existing national or regional site.\n- Added a trunk lane${feeder ? ` from ${feeder.name}` : ""} sized to the reassigned volume and rebalanced upstream flows.\n\n**Assumptions to check**\n- Capacity ${fmtNum(sized)} cases/week, fixed cost ${money(node.fixedCostPerYear.value)}/yr, handling ${money(node.handlingCostPerCase.value)}/case — all benchmarks until you have a quote.\n- New lane costs are estimated from distance at the network rate.${SCENARIO_FOOTER}`,
           actions: [{ type: "create_scenario", scenario: sc, activate: true }, { type: "set_view", view: "compare" }],
           assumptions: ["Capacity sized from network volume", "Benchmark fixed and handling costs", "Nearest-facility reassignment, not optimised"],
           chips: ["Which assumptions are driving the result?", "Explain this scenario for an executive audience", "Export the cost comparison to Excel"],

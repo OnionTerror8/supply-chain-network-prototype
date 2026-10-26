@@ -1,12 +1,53 @@
 "use client";
 
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => true,
+  );
+}
+
+function useAnimatedNumber(target: number, enabled: boolean) {
+  const [value, setValue] = useState(enabled ? 0 : target);
+  const fromRef = useRef(enabled ? 0 : target);
+  useEffect(() => {
+    if (!enabled) {
+      setValue(target);
+      fromRef.current = target;
+      return;
+    }
+    const from = fromRef.current;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / 800);
+      const eased = 1 - (1 - t) ** 3;
+      const next = from + (target - from) * eased;
+      setValue(next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, enabled]);
+  return value;
+}
+
 export function Kpi({
   label,
   value,
+  raw,
+  format,
   sub,
   delta,
   deltaLabel,
@@ -17,6 +58,8 @@ export function Kpi({
 }: {
   label: string;
   value: string;
+  raw?: number;
+  format?: (n: number) => string;
   sub?: string;
   delta?: number;
   deltaLabel?: string;
@@ -25,13 +68,16 @@ export function Kpi({
   className?: string;
   accent?: string;
 }) {
+  const reduced = usePrefersReducedMotion();
+  const animated = useAnimatedNumber(raw ?? 0, raw != null && !reduced);
+  const display = raw != null && format ? format(animated) : value;
   const neutral = delta === undefined || Math.abs(delta) < 1e-9;
   const content = (
-    <div className={cn("relative overflow-hidden rounded-xl border bg-card p-3.5 shadow-xs", className)}>
+    <div className={cn("relative overflow-hidden rounded-xl border bg-card p-3.5 shadow-xs transition-colors hover:border-primary/30", className)}>
       {accent ? <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} /> : null}
       <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
-        <div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
+        <div className="text-2xl font-semibold tracking-tight tabular-nums">{display}</div>
         {deltaLabel ? (
           <span className={cn("inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums", neutral ? "bg-muted text-muted-foreground" : good ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/12 text-rose-700 dark:text-rose-400")}>
             {neutral ? <Minus className="size-3" /> : (delta ?? 0) > 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}

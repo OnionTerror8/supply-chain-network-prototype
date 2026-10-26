@@ -68,7 +68,17 @@ function estimateLane(
   };
 }
 
-const isFlowLane = (l: Lane) => l.pattern !== "returns" && l.pattern !== "backhaul";
+export const isFlowLane = (l: Lane) => l.pattern !== "returns" && l.pattern !== "backhaul";
+
+/**
+ * A new site takes a customer when it is strictly closer than every existing
+ * peer DC and the last mile is still a regional hop. The previous 25%-and-
+ * 120 km test left Midlands customers on Daventry (~70 km) unmoved when a
+ * Birmingham RDC sat next door.
+ */
+export function shouldReassignToNewSite(dNew: number, nearestPeerKm: number, maxLastMileKm = 200): boolean {
+  return dNew < nearestPeerKm && dNew <= maxLastMileKm;
+}
 
 function refFrom(model: NetworkModel, lane: Lane, lookup?: (id: string) => NetworkNode | undefined) {
   if (!lane.costPerCase) return undefined;
@@ -112,7 +122,7 @@ export function snapshotOutbound(model: NetworkModel): OutboundSnapshot {
  * pre-change snapshot. Scaling relative to the snapshot (rather than forcing inbound to
  * equal outbound) preserves intentional yield / loss ratios present in the baseline data.
  */
-function rebalanceUpstream(model: NetworkModel, startIds: string[], before: OutboundSnapshot) {
+export function rebalanceUpstream(model: NetworkModel, startIds: string[], before: OutboundSnapshot) {
   const visited = new Set<string>();
   const queue = [...startIds];
   let guard = 0;
@@ -149,29 +159,39 @@ export function applyChange(model: NetworkModel, change: ScenarioChange, before:
       if (change.serveNearest?.length) {
         const feeder = change.feedFrom ? model.nodes.find((n) => n.id === change.feedFrom) : undefined;
         const peers = model.nodes.filter((n) => n.id !== node.id && (n.type === node.type || n.type === "cross_dock" || n.type === "regional_dc" || n.type === "national_dc"));
+        const nearestPeerKm = (cust: NetworkNode) => {
+          let best = Infinity;
+          for (const p of peers) {
+            const d = roadKm(p.location, cust.location);
+            if (d < best) best = d;
+          }
+          return best;
+        };
         let moved = 0;
         const movedLanes: Lane[] = [];
         for (const cust of model.nodes.filter((n) => change.serveNearest!.includes(n.type))) {
           const dNew = roadKm(node.location, cust.location);
+          if (!shouldReassignToNewSite(dNew, nearestPeerKm(cust))) continue;
           const inL = model.lanes.filter((l) => l.to === cust.id && l.pattern !== "returns" && l.pattern !== "backhaul");
           for (const l of inL) {
             const src = model.nodes.find((n) => n.id === l.from);
             if (!src || !peers.some((p) => p.id === src.id)) continue;
             const dOld = roadKm(src.location, cust.location);
-            // Only move a customer when the new site is materially nearer and the current
-            // stem is long enough that an extra handling step is worth it.
-            const regionalSource = src.type === "regional_dc" || src.type === "cross_dock";
-            if (dNew < dOld * 0.75 && dNew < 220 && (regionalSource || dOld > 120)) {
-              const nl = estimateLane(model, node, cust, { productFamilies: l.productFamilies, temperature: l.temperature, pattern: "direct" }, l.volumePerWeek.value, `Reassigned from ${src.name} (nearer by ${Math.round(dOld - dNew)} km)`, refFrom(model, l));
-              movedLanes.push(nl);
-              model.lanes = model.lanes.filter((x) => x.id !== l.id);
-              moved += l.volumePerWeek.value;
-              log.push(`Reassigned ${cust.name} (${fmtNum(l.volumePerWeek.value)} cases/wk) from ${src.name} to ${node.name}.`);
-            }
+            const nl = estimateLane(model, node, cust, { productFamilies: l.productFamilies, temperature: l.temperature, pattern: "direct" }, l.volumePerWeek.value, `Reassigned from ${src.name} (nearer by ${Math.round(dOld - dNew)} km)`, refFrom(model, l));
+            movedLanes.push(nl);
+            model.lanes = model.lanes.filter((x) => x.id !== l.id);
+            moved += l.volumePerWeek.value;
+            log.push(`Reassigned ${cust.name} (${fmtNum(l.volumePerWeek.value)} cases/wk) from ${src.name} to ${node.name}.`);
           }
         }
         model.lanes.push(...movedLanes);
         if (moved > 0) {
+          const cap = node.capacityPerWeek?.value ?? 0;
+          if (cap > 0 && cap < moved) {
+            const sized = Math.max(moved, Math.round(moved / 0.7 / 1000) * 1000);
+            node.capacityPerWeek = { ...node.capacityPerWeek!, value: sized, note: `Lifted to hold reassigned ${fmtNum(moved)} cases/wk at ~70% utilisation` };
+            log.push(`Increased ${node.name} capacity to ${fmtNum(sized)} cases/wk so reassigned volume fits.`);
+          }
           const src = feeder ?? model.nodes.find((n) => n.type === "national_dc") ?? model.nodes.find((n) => n.type === "factory");
           if (src) {
             model.lanes.push(estimateLane(model, src, node, { productFamilies: [...new Set(movedLanes.flatMap((l) => l.productFamilies))], temperature: node.temperature === "multi" ? "chilled" : node.temperature }, moved, `Trunk feed for reassigned volume`));
@@ -179,7 +199,7 @@ export function applyChange(model: NetworkModel, change: ScenarioChange, before:
           }
           rebalanceUpstream(model, peers.map((p) => p.id), before);
         } else {
-          log.push(`No customers were materially nearer to ${node.name}; no flows reassigned.`);
+          log.push(`No customers are nearer to ${node.name} than to an existing DC; no flows reassigned.`);
         }
       }
       break;

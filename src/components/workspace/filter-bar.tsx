@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useActive, useWorkspace, type Overlay } from "@/lib/store";
+import { useActive, useWorkspace, type InspectStory, type Overlay } from "@/lib/store";
 import { NODE_TYPE_META, type FindingCategory, type NodeType, type Temperature } from "@/lib/domain/types";
 import { applyFilters } from "@/lib/filters";
+import { INSPECT_STORIES } from "@/lib/visual/story";
 import { cn } from "@/lib/utils";
 
 const OVERLAYS: { id: Overlay; label: string; hint: string }[] = [
@@ -49,6 +50,15 @@ export function FilterBar() {
       ) : (
         <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Filter className="size-3.5" />Filters</span>
       )}
+      {CANVAS.has(view) ? (
+        <FilterSelect
+          value={filters.inspectStory}
+          onChange={(v) => setFilters({ inspectStory: v as InspectStory })}
+          placeholder="Inspect"
+          items={INSPECT_STORIES.map((s) => ({ v: s.id, l: s.label }))}
+          highlight={filters.inspectStory !== "volume"}
+        />
+      ) : null}
       <div className="mx-1 h-5 w-px shrink-0 bg-border" />
       <FilterSelect value={filters.productFamily ?? "all"} onChange={(v) => setFilters({ productFamily: v === "all" ? null : v })} placeholder="All products" items={[{ v: "all", l: "All products" }, ...model.productFamilies.map((p) => ({ v: p.id, l: p.name }))]} />
       <FilterSelect value={filters.temperature ?? "all"} onChange={(v) => setFilters({ temperature: v === "all" ? null : (v as Temperature) })} placeholder="Any temperature" items={[{ v: "all", l: "Any temperature" }, { v: "ambient", l: "Ambient" }, { v: "chilled", l: "Chilled" }, { v: "frozen", l: "Frozen" }]} />
@@ -72,7 +82,10 @@ export function FilterBar() {
         </DropdownMenuContent>
       </DropdownMenu>
       <FilterSelect value={filters.riskCategory ?? "all"} onChange={(v) => setFilters({ riskCategory: v === "all" ? null : (v as FindingCategory) })} placeholder="All risk categories" items={[{ v: "all", l: "All risk categories" }, ...(Object.keys(CATEGORY_LABEL) as FindingCategory[]).filter((c) => findings.some((f) => f.category === c)).map((c) => ({ v: c, l: CATEGORY_LABEL[c] }))]} />
-      <FilterSelect value={filters.horizon} onChange={(v) => setFilters({ horizon: v as "average" | "peak" })} placeholder="Average week" items={[{ v: "average", l: "Average week" }, { v: "peak", l: "Seasonal peak" }]} />
+      <ToggleGroup type="single" size="sm" variant="outline" value={filters.horizon} onValueChange={(v) => v && setFilters({ horizon: v as "average" | "peak" })} className="shrink-0">
+        <ToggleGroupItem value="average" className="h-7 px-2 text-xs">Average week</ToggleGroupItem>
+        <ToggleGroupItem value="peak" className="h-7 px-2 text-xs data-[state=on]:border-rose-500/40 data-[state=on]:bg-rose-500/10 data-[state=on]:text-rose-700 dark:data-[state=on]:text-rose-300">Peak week</ToggleGroupItem>
+      </ToggleGroup>
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2 text-[11px] text-muted-foreground">
         {anyFilter ? (
           <>
@@ -87,8 +100,8 @@ export function FilterBar() {
   );
 }
 
-function FilterSelect({ value, onChange, items, placeholder }: { value: string; onChange: (v: string) => void; items: { v: string; l: string }[]; placeholder: string }) {
-  const active = value !== "all" && value !== "average";
+function FilterSelect({ value, onChange, items, placeholder, highlight }: { value: string; onChange: (v: string) => void; items: { v: string; l: string }[]; placeholder: string; highlight?: boolean }) {
+  const active = highlight ?? (value !== "all" && value !== "average");
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger size="sm" className={cn("h-7 shrink-0 text-xs", active && "border-primary/50 bg-primary/5 text-primary")}>

@@ -2,11 +2,12 @@
 
 import { useMemo } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
-import { ArrowRight, FlaskConical, Sparkles } from "lucide-react";
+import { ArrowRight, FlaskConical, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kpi, SectionTitle } from "@/components/shared/kpi";
 import { ConfidenceBadge, ProvenanceLegend } from "@/components/shared/badges";
 import { FindingSummary } from "@/components/shared/finding-card";
+import { OverviewSchematic } from "../overview-schematic";
 import { useActive, useWorkspace } from "@/lib/store";
 import { COST_COMPONENT_LABEL, NODE_TYPE_META, PROVENANCE_LABEL, type Provenance } from "@/lib/domain/types";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/domain/helpers";
@@ -24,6 +25,7 @@ export function OverviewView() {
   const sendMessage = useWorkspace((s) => s.sendMessage);
   const setAgentOpen = useWorkspace((s) => s.setAgentOpen);
   const selection = useWorkspace((s) => s.selection);
+  const horizon = useWorkspace((s) => s.filters.horizon);
 
   const provenanceMix = useMemo(() => {
     if (!model) return [];
@@ -50,22 +52,23 @@ export function OverviewView() {
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{model.name}</h1>
             {isScenario ? <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">Scenario: {scenario?.name}</span> : <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Baseline</span>}
+            {horizon === "peak" ? <span className="rounded-md bg-rose-500/12 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300">Seasonal peak week</span> : null}
           </div>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{model.description ?? `${model.nodes.length} nodes and ${model.lanes.length} lanes across ${model.productFamilies.length} product families.`}</p>
         </div>
         <div className="flex items-center gap-2">
           <ConfidenceBadge confidence={metrics.dataConfidence} size="md" />
-          <Button size="sm" variant="outline" onClick={() => { setAgentOpen(true); void sendMessage("Explain the network to an executive"); }}><Sparkles />Executive brief</Button>
+          <Button size="sm" variant="outline" onClick={() => { setAgentOpen(true); void sendMessage("Explain the network to an executive"); }}><ScrollText />Executive brief</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-        <Kpi label="Cost-to-serve" value={fmtMoney(cts, cur)} sub={`${fmtMoney(metrics.costPerCase, cur, false)} per case`} delta={d(cts, costToServe(base))} deltaLabel={isScenario ? fmtMoney(cts - costToServe(base), cur) : undefined} good={cts <= costToServe(base)} hint="Warehousing, transport, last mile, cross-dock, inventory carrying, duties, waste and service-failure cost. Excludes procurement, manufacturing and the carbon shadow price." accent="#4f46e5" />
-        <Kpi label="Service level" value={fmtPct(metrics.serviceLevel, 1)} sub={`${metrics.avgLeadTimeDays.toFixed(1)} day avg lead time`} delta={d(metrics.serviceLevel, base.serviceLevel)} deltaLabel={isScenario ? `${((metrics.serviceLevel - base.serviceLevel) * 100).toFixed(1)} pts` : undefined} good={metrics.serviceLevel >= base.serviceLevel} hint="Volume-weighted on-time-in-full to customer-facing nodes, penalised by lane and facility reliability and congestion." accent="#059669" />
-        <Kpi label="Inventory" value={fmtMoney(metrics.inventoryValue, cur)} sub={`${metrics.inventoryDaysWeighted.toFixed(1)} days weighted`} delta={d(metrics.inventoryValue, base.inventoryValue)} deltaLabel={isScenario ? fmtMoney(metrics.inventoryValue - base.inventoryValue, cur) : undefined} good={metrics.inventoryValue <= base.inventoryValue} accent="#0ea5e9" />
-        <Kpi label="Utilisation" value={fmtPct(metrics.avgUtilisation)} sub={`${metrics.constrainedNodes} constrained node${metrics.constrainedNodes === 1 ? "" : "s"}`} delta={d(metrics.constrainedNodes, base.constrainedNodes)} deltaLabel={isScenario ? `${metrics.constrainedNodes - base.constrainedNodes} constrained` : undefined} good={metrics.constrainedNodes <= base.constrainedNodes} accent="#f59e0b" />
-        <Kpi label="Risk score" value={`${Math.round(metrics.riskScore)}`} sub={`resilience ${Math.round(metrics.resilienceScore)}/100`} delta={d(metrics.riskScore, base.riskScore)} deltaLabel={isScenario ? `${(metrics.riskScore - base.riskScore).toFixed(0)}` : undefined} good={metrics.riskScore <= base.riskScore} hint="Composite of single-source dependency, capacity headroom, lane reliability, border exposure and gateway concentration (0 = no risk)." accent="#e11d48" />
-        <Kpi label="Carbon" value={`${fmtNum(metrics.emissionsTonnes)} t`} sub={`${metrics.emissionsPerCaseKg.toFixed(2)} kg per case`} delta={d(metrics.emissionsTonnes, base.emissionsTonnes)} deltaLabel={isScenario ? `${fmtNum(metrics.emissionsTonnes - base.emissionsTonnes)} t` : undefined} good={metrics.emissionsTonnes <= base.emissionsTonnes} accent="#0f766e" />
+        <Kpi label="Cost-to-serve" value={fmtMoney(cts, cur)} raw={cts} format={(n) => fmtMoney(n, cur)} sub={`${fmtMoney(metrics.costPerCase, cur, false)} per case`} delta={d(cts, costToServe(base))} deltaLabel={isScenario ? fmtMoney(cts - costToServe(base), cur) : undefined} good={cts <= costToServe(base)} hint="Warehousing, transport, last mile, cross-dock, inventory carrying, duties, waste and service-failure cost. Excludes procurement, manufacturing and the carbon shadow price." accent="#1f3d4d" />
+        <Kpi label="Service level" value={fmtPct(metrics.serviceLevel, 1)} raw={metrics.serviceLevel} format={(n) => fmtPct(n, 1)} sub={`${metrics.avgLeadTimeDays.toFixed(1)} day avg lead time`} delta={d(metrics.serviceLevel, base.serviceLevel)} deltaLabel={isScenario ? `${((metrics.serviceLevel - base.serviceLevel) * 100).toFixed(1)} pts` : undefined} good={metrics.serviceLevel >= base.serviceLevel} hint="Volume-weighted on-time-in-full to customer-facing nodes, penalised by lane and facility reliability and congestion." accent="#3d7a4a" />
+        <Kpi label="Inventory" value={fmtMoney(metrics.inventoryValue, cur)} raw={metrics.inventoryValue} format={(n) => fmtMoney(n, cur)} sub={`${metrics.inventoryDaysWeighted.toFixed(1)} days weighted`} delta={d(metrics.inventoryValue, base.inventoryValue)} deltaLabel={isScenario ? fmtMoney(metrics.inventoryValue - base.inventoryValue, cur) : undefined} good={metrics.inventoryValue <= base.inventoryValue} accent="#2a6a78" />
+        <Kpi label="Utilisation" value={fmtPct(metrics.avgUtilisation)} raw={metrics.avgUtilisation} format={(n) => fmtPct(n)} sub={`${metrics.constrainedNodes} constrained node${metrics.constrainedNodes === 1 ? "" : "s"}`} delta={d(metrics.constrainedNodes, base.constrainedNodes)} deltaLabel={isScenario ? `${metrics.constrainedNodes - base.constrainedNodes} constrained` : undefined} good={metrics.constrainedNodes <= base.constrainedNodes} accent="#c2782a" />
+        <Kpi label="Risk score" value={`${Math.round(metrics.riskScore)}`} raw={metrics.riskScore} format={(n) => `${Math.round(n)}`} sub={`resilience ${Math.round(metrics.resilienceScore)}/100`} delta={d(metrics.riskScore, base.riskScore)} deltaLabel={isScenario ? `${(metrics.riskScore - base.riskScore).toFixed(0)}` : undefined} good={metrics.riskScore <= base.riskScore} hint="Composite of single-source dependency, capacity headroom, lane reliability, border exposure and gateway concentration (0 = no risk)." accent="#9a4a2a" />
+        <Kpi label="Carbon" value={`${fmtNum(metrics.emissionsTonnes)} t`} raw={metrics.emissionsTonnes} format={(n) => `${fmtNum(n)} t`} sub={`${metrics.emissionsPerCaseKg.toFixed(2)} kg per case`} delta={d(metrics.emissionsTonnes, base.emissionsTonnes)} deltaLabel={isScenario ? `${fmtNum(metrics.emissionsTonnes - base.emissionsTonnes)} t` : undefined} good={metrics.emissionsTonnes <= base.emissionsTonnes} accent="#0f6f73" />
       </div>
 
       {metrics.unservedCasesPerWeek > 0 ? (
@@ -73,6 +76,14 @@ export function OverviewView() {
           <b className="font-semibold">{fmtNum(metrics.unservedCasesPerWeek)} cases per week cannot be served</b> because capacity is exceeded downstream. Check the Findings view for the constrained nodes.
         </div>
       ) : null}
+
+      <OverviewSchematic
+        model={model}
+        metrics={metrics}
+        selectedNodeId={selection?.nodeId}
+        onSelectNode={(nodeId) => select({ nodeId })}
+        onOpenMap={() => setView("map")}
+      />
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="rounded-xl border bg-card p-4 lg:col-span-3">
@@ -96,15 +107,15 @@ export function OverviewView() {
                 }} />
                 {isScenario ? <Bar dataKey="baseline" fill="var(--muted-foreground)" opacity={0.25} radius={3} barSize={8} /> : null}
                 <Bar dataKey="value" radius={3} barSize={isScenario ? 8 : 14}>
-                  {costData.map((e, i) => <Cell key={i} fill={e.confidence === "high" ? "#4f46e5" : e.confidence === "medium" ? "#818cf8" : "#c7d2fe"} />)}
+                  {costData.map((e, i) => <Cell key={i} fill={e.confidence === "high" ? "#1f3d4d" : e.confidence === "medium" ? "#2a6a78" : "#c4b59a"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-[#4f46e5]" />high confidence</span>
-            <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-[#818cf8]" />medium</span>
-            <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-[#c7d2fe]" />low / estimated</span>
+            <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-[#1f3d4d]" />high confidence</span>
+            <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-[#2a6a78]" />medium</span>
+            <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-[#c4b59a]" />low / estimated</span>
             <span className="ml-auto">Goods purchased: {fmtMoney(metrics.procurementAnnual, cur)} (reported separately)</span>
           </div>
         </div>

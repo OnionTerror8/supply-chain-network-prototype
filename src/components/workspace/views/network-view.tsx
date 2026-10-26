@@ -11,6 +11,7 @@ import { useActive, useWorkspace, quickNode } from "@/lib/store";
 import { NODE_TYPE_META, TIER_LABEL, TIER_ORDER, type Lane, type NetworkNode, type NodeType, type Severity } from "@/lib/domain/types";
 import { fmtMoney, fmtNum, fmtPct, uid } from "@/lib/domain/helpers";
 import { applyFilters, laneVisual, nodeVisual, severityIndex, sqrtScale, SEVERITY_HEX } from "@/lib/filters";
+import { laneStoryLabel } from "@/lib/visual/story";
 import { cn } from "@/lib/utils";
 
 type FlowNodeData = { node: NetworkNode; color: string; ring?: string; utilisation?: number; throughput: number; annualCost: number; currency: string; dim: boolean; added: boolean; severity?: Severity; selected: boolean; evidence: string };
@@ -23,13 +24,14 @@ function NetNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const { node, color, utilisation, throughput, annualCost, currency, dim, added, severity, selected, ring } = data;
   const meta = NODE_TYPE_META[node.type];
   return (
-    <div className={cn("w-[200px] rounded-xl border bg-card shadow-xs transition-opacity", dim && "opacity-15", selected && "ring-2 ring-primary", added && "border-dashed border-emerald-500")} style={{ borderLeftColor: color, borderLeftWidth: 4 }}>
+    <div className={cn("relative w-[200px] rounded-xl border bg-card shadow-xs transition-all", dim && "opacity-15", selected && "ring-2 ring-primary", added && "border-dashed border-emerald-500", utilisation !== undefined && utilisation >= 0.85 && "shadow-[0_0_0_1px_rgba(225,29,72,0.25)]")} style={{ borderLeftColor: color, borderLeftWidth: 4 }}>
+      {utilisation !== undefined && utilisation >= 0.85 ? <span className="pulse-ring pointer-events-none absolute -inset-0.5 rounded-xl border border-rose-500/50" /> : null}
       <Handle type="target" position={Position.Left} className="!size-2 !border-0 !bg-slate-400" />
       <Handle type="source" position={Position.Right} className="!size-2 !border-0 !bg-slate-400" />
       <div className="flex items-start gap-2 px-2.5 pt-2">
         <span className="mt-0.5 rounded px-1 py-0.5 text-[9px] font-bold text-white" style={{ background: color }}>{meta.short}</span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold leading-tight">{node.name}</div>
+          <div className="truncate font-heading text-xs font-semibold leading-tight">{node.name}</div>
           <div className="truncate text-[10px] text-muted-foreground">{node.location.city ?? meta.label} · {node.temperature}</div>
         </div>
         {severity ? <span className="size-2 shrink-0 rounded-full" style={{ background: SEVERITY_HEX[severity] }} title={`${severity} finding`} /> : null}
@@ -40,8 +42,8 @@ function NetNode({ data }: NodeProps<Node<FlowNodeData>>) {
         {utilisation !== undefined ? <span className={cn("font-medium", utilisation >= 0.95 ? "text-rose-600" : utilisation >= 0.85 ? "text-amber-600" : "text-foreground")}>{fmtPct(utilisation)}</span> : <span className="italic">no cap.</span>}
       </div>
       {utilisation !== undefined ? (
-        <div className="mx-2.5 mb-2 h-1 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full" style={{ width: `${Math.min(100, utilisation * 100)}%`, background: ring ?? color }} />
+        <div className="mx-2.5 mb-2 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${Math.min(100, utilisation * 100)}%`, background: ring ?? color }} />
         </div>
       ) : null}
       <div className="mx-2.5 mb-1.5 text-[9px] text-muted-foreground">{data.evidence}</div>
@@ -54,7 +56,7 @@ function NetEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targe
   if (!data) return null;
   return (
     <>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: data.active ? "var(--foreground)" : data.added ? "#059669" : data.color, strokeWidth: data.active ? data.width + 1.5 : data.width, opacity: data.dim ? 0.08 : data.active ? 1 : 0.7, strokeDasharray: data.dashed || data.added ? "6 4" : undefined }} className={data.added ? "flow-animated" : undefined} />
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: data.active ? "var(--foreground)" : data.added ? "#059669" : data.color, strokeWidth: data.active ? data.width + 1.5 : data.width, opacity: data.dim ? 0.08 : data.active ? 1 : 0.75, strokeDasharray: data.dashed || data.added ? "6 4" : "10 8" }} className={cn(!data.dim && "flow-animated")} />
       {data.active ? (
         <EdgeLabelRenderer>
           <div className="pointer-events-none absolute rounded-md border bg-popover px-1.5 py-0.5 text-[10px] shadow" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>{data.label}</div>
@@ -121,12 +123,12 @@ export function NetworkView() {
         target: l.to,
         type: "net",
         markerEnd: { type: MarkerType.ArrowClosed, width: 10, height: 10, color: active ? "var(--foreground)" : v.color },
-        data: { lane: l, width: laneScale(v.value), color: v.color, dim: !!vis && !vis.laneIds.has(l.id), added: isScenario && !baselineLaneIds.has(l.id), label: `${fmtNum(l.volumePerWeek.value)}/wk · ${lm ? fmtMoney(lm.costPerCase, model.currency, false) : "?"}/case · ${lm ? fmtMoney(lm.annualCost, model.currency) : ""}`, active, dashed: l.pattern === "milk_run" || l.pattern === "backhaul" || l.pattern === "returns" },
+        data: { lane: l, width: laneScale(v.value), color: v.color, dim: !!vis && !vis.laneIds.has(l.id), added: isScenario && !baselineLaneIds.has(l.id), label: laneStoryLabel(filters.inspectStory ?? "volume", l, lm, model.currency, filters.horizon === "peak"), active, dashed: l.pattern === "milk_run" || l.pattern === "backhaul" || l.pattern === "returns" },
         zIndex: active ? 10 : 0,
       };
     });
     return { nodes, edges, columns };
-  }, [model, metrics, overlay, vis, sev, selection, hoverId, isScenario, baselineNodeIds, baselineLaneIds, positions]);
+  }, [model, metrics, overlay, vis, sev, selection, hoverId, isScenario, baselineNodeIds, baselineLaneIds, positions, filters.inspectStory, filters.horizon]);
 
   const onConnect = useCallback((c: Connection) => {
     if (!model || !c.source || !c.target || c.source === c.target) return;
@@ -202,7 +204,7 @@ export function NetworkView() {
         </DropdownMenu>
       </div>
       <div className="absolute bottom-3 left-3 rounded-lg border bg-card/90 px-2.5 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
-        Tiers run left → right. Drag from a node’s right handle to another node to add a lane. Click any element to inspect and edit.
+        Tiers run left → right. Lane colour = transport mode. Hover a lane for the selected story. Constrained sites pulse.
       </div>
     </div>
   );

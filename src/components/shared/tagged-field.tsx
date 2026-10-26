@@ -3,9 +3,20 @@
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { ProvenanceBadge } from "./badges";
+import { ProvenanceBadge, TaggedValue } from "./badges";
 import type { Tagged } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
+
+function asUserTagged(draft: string, tagged: Tagged | undefined, format?: (v: number) => string): Tagged | undefined {
+  const n = Number(draft);
+  if (draft.trim() === "" || Number.isNaN(n)) return undefined;
+  if (tagged && n === tagged.value && tagged.source === "user") return undefined;
+  return {
+    value: n,
+    source: "user",
+    note: `Entered by user${tagged && tagged.source !== "user" ? ` (previously ${tagged.source}: ${format ? format(tagged.value) : tagged.value})` : ""}`,
+  };
+}
 
 /**
  * Inline editor for a Tagged number. Editing marks the value as user-entered and
@@ -35,10 +46,8 @@ export function TaggedField({
 
   const commit = () => {
     setEditing(false);
-    const n = Number(draft);
-    if (draft.trim() === "" || Number.isNaN(n)) return;
-    if (tagged && n === tagged.value && tagged.source === "user") return;
-    onChange({ value: n, source: "user", note: `Entered by user${tagged && tagged.source !== "user" ? ` (previously ${tagged.source}: ${format ? format(tagged.value) : tagged.value})` : ""}` });
+    const next = asUserTagged(draft, tagged, format);
+    if (next) onChange(next);
   };
 
   return (
@@ -66,5 +75,62 @@ export function TaggedField({
         <ProvenanceBadge source={tagged?.source ?? "missing"} note={tagged?.range ? `Range ${format ? format(tagged.range[0]) : tagged.range[0]} – ${format ? format(tagged.range[1]) : tagged.range[1]}` : tagged?.note} />
       </div>
     </div>
+  );
+}
+
+/** Compact table-cell editor. Click to type; commit marks the value as user-entered. */
+export function TaggedCell({
+  tagged,
+  format,
+  step,
+  onChange,
+  ariaLabel,
+}: {
+  tagged?: Tagged;
+  format: (v: number) => string;
+  step?: number;
+  onChange: (t: Tagged) => void;
+  ariaLabel?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    setEditing(false);
+    const next = asUserTagged(draft, tagged, format);
+    if (next) onChange(next);
+  };
+
+  return (
+    <span className="inline-flex justify-end" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+      {editing ? (
+        <Input
+          autoFocus
+          type="number"
+          step={step ?? "any"}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          className="ml-auto h-7 w-24 text-right text-xs tabular-nums"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(tagged ? String(tagged.value) : "");
+            setEditing(true);
+          }}
+          className="group inline-flex items-center justify-end gap-1 rounded-md px-1 text-right hover:bg-muted"
+          aria-label={ariaLabel ?? (tagged ? `Edit ${format(tagged.value)}` : "Add value")}
+        >
+          <TaggedValue tagged={tagged} format={format} />
+          <Pencil className="size-3 opacity-0 transition-opacity group-hover:opacity-60" />
+        </button>
+      )}
+    </span>
   );
 }
